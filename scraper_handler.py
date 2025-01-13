@@ -67,7 +67,7 @@ class ScraperHandler:
 
         return season_items
 
-    def find_season_episodes_from_page(self, season_page_link):
+    def find_season_episodes_from_page(self, season_page_link, episode_folder_path):
         episodes = list()
         response = requests.get(season_page_link)
         # print(response.url)
@@ -80,17 +80,29 @@ class ScraperHandler:
             if a_tag:  # Ensure <a> tag exists
                 episode_link = "https:" + a_tag.get("href")
                 # print(episode_link)
+
+                # Regular expression to find 'season-' followed by a number
+                matches = re.findall(r"(?:Episode|Season)-(\d+)", episode_link, re.IGNORECASE)
+
+                if matches:
+                    episode_number = int(matches[-1])  # Extract the number after 'season-' or 'episode-'
+                    # if episode_number not in episodes:
+                    episode_item = self.get_episodes_info_url(
+                        episode_link=episode_link,
+                        episode_folder_path=episode_folder_path
+                    )
+                    episodes.append(episode_item)
+
+                else:
+                    episode_item = self.get_episodes_info_url(
+                        episode_link=episode_link,
+                        episode_folder_path=episode_folder_path
+                    )
+                    episodes.append(episode_item)
+
             else:
+
                 continue
-
-            # Regular expression to find 'season-' followed by a number
-            matches = re.findall(r"(?:Episode|Season)-(\d+)", episode_link, re.IGNORECASE)
-
-            if matches:
-                episode_number = int(matches[-1])  # Extract the number after 'season-'
-                # if episode_number not in episodes:
-                # episode = self.get_episodes_info_url(episode_link)
-                episodes.append(episode_number)
 
         return episodes
 
@@ -126,41 +138,62 @@ class ScraperHandler:
                     season_page_link = season_item.season_url + a_tag.get("href")
                     # print(season_page_link)
 
-                    episodes_in_page = self.find_season_episodes_from_page(season_page_link=season_page_link)
+                    episodes_in_page = self.find_season_episodes_from_page(season_page_link=season_page_link,
+                                                                           episode_folder_path=full_path)
                     for episode in episodes_in_page:
                         episodes.append(episode)
 
         except:
-            episodes = self.find_season_episodes_from_page(season_page_link=season_item.season_url)
+            episodes = self.find_season_episodes_from_page(
+                season_page_link=season_item.season_url,
+                episode_folder_path=full_path
+            )
 
         return episodes
 
-    def get_episodes_info_url(self, episode_link):
+    def get_episodes_info_url(self, episode_link, episode_folder_path):
+        episode_item = None  # Default value
+
         response = requests.get(episode_link)
 
+        # Parse the HTML with BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Base URL for constructing the full link
-        base_url = "https://eng.cartoonsarea.cc"
+        # Find all <div class="Singamdasam"> elements
+        singamdasam_divs = soup.find_all('div', class_='Singamdasam')
 
-        # Find all <div> tags with class "Singamdasam"
-        divs = soup.find_all('div', class_='Singamdasam')
+        links = []
 
-        # Iterate through each <div> and look for file size greater than zero
-        for div in divs:
-            size_text = div.get_text()
-            # Check if the size is greater than zero (size is assumed to be in format 'XX.XXMB')
-            if "Size:" in size_text and "0.00MB" not in size_text:
-                link_tag = div.find('a', href=True)
-                if link_tag:
-                    # Construct the full URL
-                    full_url = urljoin(base_url, link_tag['href'])
-                    print("Full Download URL:", full_url)
-                    break  # Stop after finding the first matching link
+        # Loop through each <div> to extract the links and file sizes
+        for div in singamdasam_divs:
+            # print(div)
+            # print("#" * 50)
+            # Find the <a> tag and the size span
+            a_tag = div.find('a')
+            size_span = div.find('span', text=lambda x: x and 'Size:' in x)
 
-    def get_episode_download_url(self, episode_info_link):
+            if a_tag and size_span:
+                # Extract the size value
+                size_text = size_span.find_next_sibling(text=True)
+                if size_text:
+                    # Remove "MB" and convert size to float for comparison
+                    size_value = float(size_text.replace('MB', '').strip())
+                    if size_value > 0:  # Only add links with size > 0 MB
+                        links.append("https:" + a_tag['href'])
+
+        # Print the extracted links
+        for link in links:
+            # print(f"Link: {link}")
+            episode_item = self.get_episode_item(
+                episode_info_link=link,
+                episode_folder_path=episode_folder_path
+            )
+
+        return episode_item
+
+    def get_episode_item(self, episode_info_link, episode_folder_path):
         response = requests.get(episode_info_link)
-        # Parse the HTML content with BeautifulSoup
+        # print(response.status_code, response.url)
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # Base URL for constructing the full link
@@ -169,9 +202,35 @@ class ScraperHandler:
         # Find the anchor tag with class 'download-btn'
         download_link = soup.find('a', class_='download-btn')
 
-        # Construct the full download URL
         if download_link and 'href' in download_link.attrs:
+            # Construct the full download URL
             full_download_url = urljoin(base_url, download_link['href'])
-            print("Full Download URL:", full_download_url)
+            print(full_download_url)
+
+            # Extract season number from the URL
+            season_match = re.search(r"Season\s(\d+)", episode_info_link, re.IGNORECASE)
+            season_number = int(season_match.group(1)) if season_match else None
+
+            # Extract episode number from the URL
+            episode_number_match = re.search(r"Season\s(\d+)", episode_info_link, re.IGNORECASE)
+            episode_number = int(episode_number_match.group(1)) if episode_number_match else None
+
+            # Extract episode name from the download URL
+            episode_name_match = re.search(r"/\d+\s(.+?)\.mp4", full_download_url, re.IGNORECASE)
+            episode_name = (
+                episode_name_match.group(1).replace('%20', ' ').replace('!', '')
+                if episode_name_match else "Unknown"
+            )
+
+            # Create and return the Episode object
+            episode = Episode(
+                episode_number=episode_number,
+                episode_name=episode_name,
+                episode_url=full_download_url,
+                episode_folder_path=episode_folder_path,
+                season_number=season_number
+            )
+            return episode
         else:
             print("No download link found.")
+            return None
