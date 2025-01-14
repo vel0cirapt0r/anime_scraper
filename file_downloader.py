@@ -30,17 +30,31 @@ class FileDownloader:
             print(f"Failed to retrieve file size for {url}. Error: {e}")
             return None
 
-    def download_file(self, url, target_path):
+    def create_folder(self, folder_path):
         """
-        Download a single file with support for resuming partial downloads.
-        :param url: The file URL.
-        :param target_path: The path to save the file.
+        Create the folder if it doesn't exist.
+        :param folder_path: Path where the folder should be created.
         """
         try:
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            os.makedirs(folder_path, exist_ok=True)
+            print(f"Folder created: {folder_path}")
+        except Exception as e:
+            print(f"Error creating folder {folder_path}: {e}")
+
+    def download_file(self, episode):
+        """
+        Download a single episode file with support for resuming partial downloads.
+        :param episode: Episode object containing episode details.
+        """
+        try:
+            # Create folder if it doesn't exist
+            self.create_folder(episode.episode_folder_path)
+
+            # Construct the target path for saving the episode file
+            target_path = os.path.join(episode.episode_folder_path, f"{episode.episode_name}.mp4")
 
             # Get the total size of the file from the server
-            total_size = self.get_file_size(url)
+            total_size = self.get_file_size(episode.episode_url)
 
             # Determine the starting point of the download
             downloaded_size = os.path.getsize(target_path) if os.path.exists(target_path) else 0
@@ -51,16 +65,16 @@ class FileDownloader:
                 return True
 
             headers = {"Range": f"bytes={downloaded_size}-"} if downloaded_size > 0 else {}
-            with requests.get(url, stream=True, headers=headers, timeout=self.timeout) as response:
+            with requests.get(episode.episode_url, stream=True, headers=headers, timeout=self.timeout) as response:
                 response.raise_for_status()
                 mode = "ab" if downloaded_size > 0 else "wb"  # Append for partial downloads
                 with open(target_path, mode) as file, tqdm(
-                    desc=os.path.basename(target_path),
-                    total=total_size,
-                    initial=downloaded_size,
-                    unit="B",
-                    unit_scale=True,
-                    unit_divisor=1024,
+                        desc=episode.episode_name,
+                        total=total_size,
+                        initial=downloaded_size,
+                        unit="B",
+                        unit_scale=True,
+                        unit_divisor=1024,
                 ) as bar:
                     for chunk in response.iter_content(chunk_size=8192):
                         file.write(chunk)
@@ -68,33 +82,18 @@ class FileDownloader:
 
             return True  # Success
         except Exception as e:
-            print(f"Failed to download {url}. Error: {e}")
+            print(f"Failed to download {episode.episode_name}. Error: {e}")
             return False  # Failure
 
-    def download_files(self, url_list, target_dir):
+    def download_episodes(self, episodes):
         """
-        Download multiple files with support for parallelism.
-        :param url_list: List of file URLs.
-        :param target_dir: Directory to save the files.
+        Download multiple episodes with support for parallelism.
+        :param episodes: List of Episode objects to download.
         """
-        def download_task(url):
-            filename = os.path.basename(url)
-            target_path = os.path.join(target_dir, filename)
-            return self.download_file(url, target_path)
+        def download_task(episode):
+            return self.download_file(episode)
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(executor.map(download_task, url_list))
+            results = list(executor.map(download_task, episodes))
 
         return results
-
-
-# Example usage
-if __name__ == "__main__":
-    downloader = FileDownloader()
-    urls = [
-        "https://eng.cartoonsarea.cc/USER-DATA/Cartoonsarea/English/O/One Piece/Season 2/Episode 74//74 The Devilish Candle!.mp4",
-        "https://eng.cartoonsarea.cc/USER-DATA/Cartoonsarea/English/O/One Piece/Season 2/Episode 75//75 A Hex on Luffy!.mp4",
-        "https://eng.cartoonsarea.cc/USER-DATA/Cartoonsarea/English/O/One Piece/Season 2/Episode 76//76 Time to Fight Back!.mp4",
-    ]
-    target_directory = "downloads"
-    downloader.download_files(urls, target_directory)
