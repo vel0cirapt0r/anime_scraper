@@ -13,16 +13,6 @@ class ScraperHandler:
 
     def scrap_seasons(self):
         parent_folder = "one-piece"
-
-        # Create the parent folder
-        try:
-            os.mkdir(parent_folder)
-            # print(f"Folder '{parent_folder}' created successfully.")
-        except FileExistsError:
-            print(f"Folder '{parent_folder}' already exists.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
         response = requests.get(self.anime_url)
 
         # print(response.status_code)
@@ -106,17 +96,6 @@ class ScraperHandler:
     def scrape_episodes_of_season(self, season_item):
 
         full_path = season_item.season_folder_path
-        parent_folder, new_folder_name = full_path.split("/")
-
-        # Create the new folder for each season in the one-piece folder
-        try:
-            os.mkdir(full_path)
-            # print(f"Folder '{new_folder_name}' created inside '{parent_folder}'.")
-        except FileExistsError:
-            print(f"Folder '{new_folder_name}' already exists in '{parent_folder}'.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
         response = requests.get(season_item.season_url)
         # print(response.url)
         soup = BeautifulSoup(response.text, "html.parser")
