@@ -53,8 +53,6 @@ class ScraperHandler:
             else:
                 pass
 
-        print(f"this anime has {len(season_items)} seasons available.")
-
         return season_items
 
     def find_season_episodes_from_page(self, season_page_link, episode_folder_path):
@@ -90,40 +88,50 @@ class ScraperHandler:
                     )
                     episodes.append(episode_item)
 
-
         return episodes
 
     def scrape_episodes_of_season(self, season_item):
-
         full_path = season_item.season_folder_path
-        response = requests.get(season_item.season_url)
-        # print(response.url)
-        soup = BeautifulSoup(response.text, "html.parser")
-
+        episodes = []
         try:
+            # Send a request to the season page
+            response = requests.get(season_item.season_url)
+            response.raise_for_status()  # Ensure we got a valid response
+
+            # Parse the page content
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            # Find the pagination container
             page_tag = soup.find('ul', attrs={"class": "pagination"})
 
-            pages = page_tag.find_all('li')
+            if page_tag:
+                pages = page_tag.find_all('li')
 
-            episodes = list()
+                for page in pages:
+                    # Find the single <a> tag within the current <div>
+                    a_tag = page.find("a")
+                    if a_tag:  # Ensure <a> tag exists
+                        season_page_link = season_item.season_url + a_tag.get("href")
 
-            for page in pages:
-                # Find the single <a> tag within the current <div>
-                a_tag = page.find("a")
-                if a_tag:  # Ensure <a> tag exists
-                    season_page_link = season_item.season_url + a_tag.get("href")
-                    # print(season_page_link)
+                        # Fetch episodes from this page
+                        episodes_in_page = self.find_season_episodes_from_page(
+                            season_page_link=season_page_link,
+                            episode_folder_path=full_path
+                        )
+                        episodes.extend(episodes_in_page)
 
-                    episodes_in_page = self.find_season_episodes_from_page(season_page_link=season_page_link,
-                                                                           episode_folder_path=full_path)
-                    for episode in episodes_in_page:
-                        episodes.append(episode)
+            else:
+                # If pagination is not found, scrape the first season page directly
+                print("No pagination found. Scraping episodes from the first page.")
+                episodes = self.find_season_episodes_from_page(
+                    season_page_link=season_item.season_url,
+                    episode_folder_path=full_path
+                )
 
-        except:
-            episodes = self.find_season_episodes_from_page(
-                season_page_link=season_item.season_url,
-                episode_folder_path=full_path
-            )
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while requesting the page: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
         return episodes
 
@@ -184,16 +192,24 @@ class ScraperHandler:
             # print(full_download_url)
 
             # Extract season number from the URL
-            season_match = re.search(r"[Ss]eason[\s\-]*(\d+)", episode_info_link)
+            season_match = re.search(r"[Ss]eason[\s\-]*(\d+)", full_download_url)
             season_number = int(season_match.group(1)) if season_match else None
 
             # Extract episode number from the URL
-            episode_number_match = re.search(r"Episode\s(\d+)", episode_info_link, re.IGNORECASE)
+            episode_number_match = re.search(r"Episode\s(\d+)", full_download_url, re.IGNORECASE)
             if not episode_number_match:
-                # If "Episode X" is not found, look for "X " after "Episode"
-                episode_number_match = re.search(r"/(\d+)\s", episode_info_link)
+                # If "Episode X" is not found, look for a number after "Season X/" or before a space in the file name
+                episode_number_match = re.search(r"/(\d+)\s", full_download_url)
 
-            episode_number = int(episode_number_match.group(1)) if episode_number_match else None
+            if not episode_number_match:
+                # If still no match, attempt to capture the number directly after "Season X//"
+                episode_number_match = re.search(r"Season\s\d+//(\d+)", full_download_url)
+
+            if episode_number_match:
+                episode_number = episode_number_match.group(1)
+                # print(f"Episode number: {episode_number}")
+            else:
+                print("No episode number found.")
 
             # Extract episode name from the download URL
             episode_name_match = re.search(r"/\d+\s(.+?)\.mp4", full_download_url, re.IGNORECASE)
