@@ -16,6 +16,20 @@ class FileDownloader:
         self.timeout = timeout
         self.max_workers = max_workers
 
+    def get_download_confirmation():
+        """
+        Ask the user for download confirmation.
+        Repeats the prompt until the user provides a valid response.
+        """
+        while True:
+            download_confirm = input("\nDo you want to download the episodes? (yes/no): ").strip().lower() or "yes"
+            if download_confirm in ["yes", "y"]:
+                return True
+            elif download_confirm in ["no", "n"]:
+                return False
+            else:
+                print("Invalid input. Please enter 'yes' or 'no'.")
+
     def get_file_size(self, url):
         """
         Get the size of the file from the server using a HEAD request.
@@ -51,7 +65,9 @@ class FileDownloader:
             self.create_folder(episode.episode_folder_path)
 
             # Construct the target path for saving the episode file
-            target_path = os.path.join(episode.episode_folder_path, f"{episode.episode_name}.mp4")
+            episode_file_name_with_space = f"{episode.episode_number}_{episode.episode_name}.mp4"
+            episode_file_name = episode_file_name_with_space.replace(" ", "_")
+            target_path = os.path.join(episode.episode_folder_path, episode_file_name)
 
             # Get the total size of the file from the server
             total_size = self.get_file_size(episode.episode_url)
