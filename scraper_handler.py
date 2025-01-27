@@ -209,9 +209,9 @@ class ScraperHandler:
                 if match_episode_season:
                     episode_number_from_url = int(match_episode_season[1])
                     # print(episode_number_from_url)
-                    print(episode_link)
+                    # print(episode_link)
                     episode_item = get_episode_by_season_and_number(season_item, episode_number_from_url)
-                    print(episode_item)
+                    # print(episode_item)
                     if not episode_item:
                         episode_item = self.get_episodes_info_url(
                             episode_link=episode_link,
@@ -219,7 +219,7 @@ class ScraperHandler:
                             season_item=season_item
                         )
                     # for episode_item in episode_items:
-                    print(episode_item.episode_number)
+                    # print(episode_item.episode_number)
                     if episode_item not in episodes:
                         episodes.append(episode_item)
 
