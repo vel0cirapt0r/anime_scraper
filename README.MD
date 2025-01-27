@@ -18,6 +18,7 @@ The creator does not encourage or endorse illegal downloading or copyright infri
   - **Episode Files**: Episodes are downloaded into the corresponding season folder.
 - Implements caching to avoid redundant downloads.
 - User-friendly prompts for selecting anime seasons to scrape and download.
+- Resumable Downloads: Automatically resumes incomplete downloads, ensuring no duplicated or missed episodes.
 
 ---
 
@@ -26,7 +27,7 @@ The creator does not encourage or endorse illegal downloading or copyright infri
 - **Structured Scraping**: Dynamically parses URLs and extracts data to create a logical folder structure.
 - **Database Integration**: Uses Peewee ORM to manage caching, ensuring efficient data retrieval and minimizing redundant requests.
 - **Error Handling**: Robust mechanisms to handle unexpected errors and provide clear feedback to the user.
-- Parallel Downloads: Optimize download speeds by implementing multi-threaded or asynchronous downloads, enabling up to 4 episodes to be downloaded concurrently for faster completion of large seasons.
+- **Parallel Downloads**: Optimize download speeds by implementing multithreaded or asynchronous downloads, enabling up to 4 episodes to be downloaded concurrently for faster completion of large seasons.
 - **Dynamic User Prompts**: Guides the user through URL input, season selection, and download confirmation seamlessly.
 
 ---
@@ -62,10 +63,10 @@ Before installing dependencies, create a virtual environment:
 
 1. Clone the repository:
 
-```bash
-git clone https://github.com/vel0cirapt0r/anime_scraper
-cd anime_scraper
-```
+    ```bash
+    git clone https://github.com/vel0cirapt0r/anime_scraper
+    cd anime_scraper
+    ```
 
 2. Activate the virtual environment (see above).
 
