@@ -142,6 +142,7 @@ class ScraperHandler:
                 for page in pages:
                     # Find the single <a> tag within the current <div>
                     a_tag = page.find("a")
+                    # print(a_tag)
                     if a_tag:  # Ensure <a> tag exists
                         season_page_link = season_item.season_url + a_tag.get("href")
                         # print(season_page_link)
@@ -267,71 +268,64 @@ class ScraperHandler:
         return episode_items
 
     def get_episode_item(self, episode_info_link, episode_folder_path, season_item):
-        # extract the episode number from the URL using a regular expression
-        # print(episode_info_link)
-        episode_number_from_url = int(re.search(r'(\d+)(?=\s+[A-Za-z])', episode_info_link, re.IGNORECASE).group(1))
+        response = requests.get(episode_info_link)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        base_url = "https://eng.cartoonsarea.cc"
 
-        # check if episode exists in database
-        episode = get_episode_by_season_and_number(season_item, episode_number_from_url)
-        if not episode:
-            response = requests.get(episode_info_link)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            base_url = "https://eng.cartoonsarea.cc"
+        # Find the information div
+        info_div = soup.find('div', class_='Singamdasam text-center')
+        if not info_div:
+            print("No information div found.")
+            return None
 
-            # Find the information div
-            info_div = soup.find('div', class_='Singamdasam text-center')
-            if not info_div:
-                print("No information div found.")
-                return None
+        # Parse episode details from the table
+        details = {}
+        table = info_div.find('table')
+        if table:
+            for row in table.find_all('tr'):
+                label = row.find('td', class_='desc_label')
+                value = row.find('td', class_='desc_value')
+                if label and value:
+                    details[label.text.strip()] = value.text.strip()
 
-            # Parse episode details from the table
-            details = {}
-            table = info_div.find('table')
-            if table:
-                for row in table.find_all('tr'):
-                    label = row.find('td', class_='desc_label')
-                    value = row.find('td', class_='desc_value')
-                    if label and value:
-                        details[label.text.strip()] = value.text.strip()
+        # Extract download link
+        download_link_tag = table.find_next('a', class_='download-btn')
+        if not download_link_tag or 'href' not in download_link_tag.attrs:
+            print("No download link found.")
+            return None
 
-            # Extract download link
-            download_link_tag = table.find_next('a', class_='download-btn')
-            if not download_link_tag or 'href' not in download_link_tag.attrs:
-                print("No download link found.")
-                return None
+        full_download_url = urljoin(base_url, download_link_tag['href'])
+        # print(full_download_url)
+        # print(details)
 
-            full_download_url = urljoin(base_url, download_link_tag['href'])
-            # print(full_download_url)
-            # print(details)
+        # Extract required fields
+        file_name = details.get("File Name:", "Unknown")
+        episode_size = details.get("File Size:", "Unknown")
+        duration = details.get("Duration:", "Unknown")
+        file_format = details.get("File Format:", "Unknown")
+        resolution = details.get("Resolution:", "Unknown")
 
-            # Extract required fields
-            file_name = details.get("File Name:", "Unknown")
-            episode_size = details.get("File Size:", "Unknown")
-            duration = details.get("Duration:", "Unknown")
-            file_format = details.get("File Format:", "Unknown")
-            resolution = details.get("Resolution:", "Unknown")
+        # Extract episode number and name
+        try:
+            episode_number = int(file_name.split()[0])  # Assuming episode number is the first part
+        except (ValueError, IndexError):
+            episode_number = -1  # Default value for error
+            print("Could not determine episode number.")
 
-            # Extract episode number and name
-            try:
-                episode_number = int(file_name.split()[0])  # Assuming episode number is the first part
-            except (ValueError, IndexError):
-                episode_number = -1  # Default value for error
-                print("Could not determine episode number.")
+        episode_name = file_name.split(maxsplit=1)[-1].rsplit('.', 1)[0]  # Extract name without extension
 
-            episode_name = file_name.split(maxsplit=1)[-1].rsplit('.', 1)[0]  # Extract name without extension
-
-            # Create the Episode instance
-            episode = add_episode(
-                season=season_item,
-                episode_number=episode_number,
-                episode_name=episode_name,
-                file_name=file_name,
-                episode_size=episode_size,
-                duration=duration,
-                file_format=file_format,
-                resolution=resolution,
-                episode_url=full_download_url,
-                episode_folder_path=episode_folder_path,
-            )
-            mark_episode_as_cached(episode)
+        # Create the Episode instance
+        episode = add_episode(
+            season=season_item,
+            episode_number=episode_number,
+            episode_name=episode_name,
+            file_name=file_name,
+            episode_size=episode_size,
+            duration=duration,
+            file_format=file_format,
+            resolution=resolution,
+            episode_url=full_download_url,
+            episode_folder_path=episode_folder_path,
+        )
+        mark_episode_as_cached(episode)
         return episode
