@@ -236,15 +236,22 @@ class ScraperHandler:
                             season_item=season_item
                         )
                     elif function_identifier == 2:
-                        episode_item = self.get_episodes_info_url(
+                        episode_items = self.get_episodes_info_url(
                             episode_link=episode_link,
                             episode_folder_path=episode_folder_path,
                             season_item=season_item
                         )
+                        for episode_item in episode_items:
+                            # Add the episode to the list if it's valid and unique
+                            if episode_item and hasattr(episode_item,
+                                                        'episode_number') and episode_item not in episodes:
+                                episodes.append(episode_item)
 
-                # Add the episode to the list if it's unique
-                if episode_item and episode_item not in episodes:
+                # Add the episode to the list if it's valid and unique
+                if episode_item and hasattr(episode_item, 'episode_number') and episode_item not in episodes:
                     episodes.append(episode_item)
+
+
 
         return episodes
 
