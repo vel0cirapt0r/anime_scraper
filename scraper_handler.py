@@ -190,29 +190,38 @@ class ScraperHandler:
                 # Check for '/<number> ' pattern
                 match_file_number = re.search(r"/(\d+)\s", episode_link)
                 if match_file_number:
+                    episode_number_from_url = match_file_number.group(1)
+                    # print(episode_number_from_url)
                     # print(episode_link)
-                    episode_item = self.get_episode_item(
-                        episode_info_link=episode_link,
-                        episode_folder_path=episode_folder_path,
-                        season_item=season_item
-                    )
+                    episode_item = get_episode_by_season_and_number(season_item, episode_number_from_url)
+                    if not episode_item:
+                        episode_item = self.get_episode_item(
+                            episode_info_link=episode_link,
+                            episode_folder_path=episode_folder_path,
+                            season_item=season_item
+                        )
                     if episode_item not in episodes:
                         episodes.append(episode_item)
                     continue  # Skip further checks for this link
 
                 # Check for 'Episode-' or 'Season-' pattern
-                match_episode_season = re.search(r"(?:Episode-|Season-)(\d+)", episode_link, re.IGNORECASE)
+                match_episode_season = re.findall(r"(?:Episode-|Season-)(\d+)", episode_link, re.IGNORECASE)
                 if match_episode_season:
-                    # print(episode_link)
-                    episode_items = self.get_episodes_info_url(
-                        episode_link=episode_link,
-                        episode_folder_path=episode_folder_path,
-                        season_item=season_item
-
-                    )
-                    for episode_item in episode_items:
-                        if episode_item not in episodes:
-                            episodes.append(episode_item)
+                    episode_number_from_url = int(match_episode_season[1])
+                    # print(episode_number_from_url)
+                    print(episode_link)
+                    episode_item = get_episode_by_season_and_number(season_item, episode_number_from_url)
+                    print(episode_item)
+                    if not episode_item:
+                        episode_item = self.get_episodes_info_url(
+                            episode_link=episode_link,
+                            episode_folder_path=episode_folder_path,
+                            season_item=season_item
+                        )
+                    # for episode_item in episode_items:
+                    print(episode_item.episode_number)
+                    if episode_item not in episodes:
+                        episodes.append(episode_item)
 
         return episodes
 
