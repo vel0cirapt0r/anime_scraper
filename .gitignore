@@ -162,3 +162,4 @@ cython_debug/
 .DS_Store
 filepaths.py
 One Piece
+anime_database.db
