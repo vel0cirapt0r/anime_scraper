@@ -106,7 +106,8 @@ def get_season_by_anime_and_number(anime, season_number):
         season = Season.get(Season.anime == anime, Season.season_number == season_number)
         return season
     except DoesNotExist:
-        print(f"Season {season_number} not found for anime '{anime.anime_name}'.")
+        if season_number:
+            print(f"Season {season_number} not found for anime '{anime.anime_name}'.")
         return None
 
 
@@ -116,7 +117,8 @@ def get_episode_by_season_and_number(season, episode_number):
         episode = Episode.get(Episode.season == season, Episode.episode_number == episode_number)
         return episode
     except DoesNotExist:
-        print(f"Episode {episode_number} not found for season {season.season_number}.")
+        if episode_number:
+            print(f"Episode {episode_number} not found for season {season.season_number}.")
         return None
 
 
