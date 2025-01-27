@@ -18,12 +18,19 @@ from db_manager import (
 
 class ScraperHandler:
     def __init__(self, anime_url):
+        """
+        Initialize the ScraperHandler with the provided anime URL.
+
+        :param anime_url: The URL of the anime to scrape.
+        """
         self.anime_url = anime_url
 
     def get_anime_model_from_url(self):
         """
-        Extract the anime name from the provided URL using regex.
-        Assumes that the anime name is in the last part of the URL.
+        Extract the anime name from the given URL or prompt the user to input it if not found.
+        Check the database for an existing anime entry, and create one if it doesn't exist.
+
+        :return: The Anime model instance for the scraped anime.
         """
         match = re.search(r"/([^/]+)-Dubbed-Videos", self.anime_url)  # Match the specific pattern before '-Dubbed-Videos'
         if match:
@@ -40,6 +47,13 @@ class ScraperHandler:
         return anime
 
     def scrap_seasons(self, anime_item):
+        """
+        Scrape the seasons for the given anime from the website and save them to the database.
+        If a season already exists, it will not be added again.
+
+        :param anime_item: The Anime model instance for which seasons are being scraped.
+        :return: A list of Season model instances for the scraped seasons.
+        """
         parent_folder = anime_item.anime_name
         response = requests.get(self.anime_url)
 
@@ -66,9 +80,6 @@ class ScraperHandler:
                 full_path = os.path.join(parent_folder, str(season_number))
 
                 season = get_season_by_anime_and_number(anime_item, season_number)
-                if season not in season_items:
-                    season_items.append(season)
-
                 if not season:
                     season = add_season(
                         anime=anime_item,
@@ -77,16 +88,17 @@ class ScraperHandler:
                         season_folder_path=full_path
                     )
                     # print(season.season_url)
-                    if season not in season_items:
-                        season_items.append(season)
+                if season not in season_items:
+                    season_items.append(season)
 
         return season_items
 
     def get_seasons_to_scrape(self, seasons):
         """
-        Allow the user to choose which seasons to scrape.
-        :param seasons: List of season objects.
-        :return: List of seasons selected by the user.
+        Prompt the user to select which seasons to scrape from a list of available seasons.
+
+        :param seasons: A list of Season model instances.
+        :return: A list of Season model instances selected by the user for scraping.
         """
         while True:  # Keep asking for input until it's valid
             print("\nAvailable seasons:")
@@ -123,6 +135,14 @@ class ScraperHandler:
                 return seasons_to_scrape  # Return if valid seasons are selected
 
     def scrape_episodes_of_season(self, season_item):
+        """
+        Scrape all episodes for a given season. If pagination exists on the season page,
+        scrape episodes across all pages. Add episodes to the database or retrieve them
+        if they already exist.
+
+        :param season_item: The Season model instance for which episodes are being scraped.
+        :return: A list of Episode model instances for the scraped episodes.
+        """
         full_path = season_item.season_folder_path
         episodes = []
         try:
@@ -174,6 +194,17 @@ class ScraperHandler:
         return episodes
 
     def find_season_episodes_from_page(self, season_page_link, episode_folder_path, season_item, soup):
+        """
+        Scrape episodes from a single page of a season.
+        Determine whether to use `get_episode_item` or `get_episodes_info_url` based on the
+        URL structure.
+
+        :param season_page_link: The URL of the season page to scrape.
+        :param episode_folder_path: The folder path where episodes are saved locally.
+        :param season_item: The Season model instance to which the episodes belong.
+        :param soup: (Optional) BeautifulSoup object for the parsed HTML of the page.
+        :return: A list of Episode model instances scraped from the page.
+        """
         episodes = []
         if soup is None:
             response = requests.get(season_page_link)
@@ -188,45 +219,67 @@ class ScraperHandler:
             if a_tag:  # Ensure <a> tag exists
                 episode_link = "https:" + a_tag.get("href")
 
-                # Check for '/<number> ' pattern
-                match_file_number = re.search(r"/(\d+)\s", episode_link)
-                if match_file_number:
-                    episode_number_from_url = match_file_number.group(1)
-                    # print(episode_number_from_url)
-                    # print(episode_link)
-                    episode_item = get_episode_by_season_and_number(season_item, episode_number_from_url)
-                    if not episode_item:
+                # Extract episode number and decide function
+                episode_number, function_identifier = self.extract_episode_number(episode_link)
+                if not episode_number and episode_link != "https://eng.cartoonsarea.cc/":
+                    print(f"couldn't find episode number from {episode_link}")
+                    continue  # Skip if no valid episode number is found
+
+                # Check if the episode already exists in the database
+                episode_item = get_episode_by_season_and_number(season_item, episode_number)
+                if not episode_item:
+                    # Use the appropriate function based on the identifier
+                    if function_identifier == 1:
                         episode_item = self.get_episode_item(
                             episode_info_link=episode_link,
                             episode_folder_path=episode_folder_path,
                             season_item=season_item
                         )
-                    if episode_item not in episodes:
-                        episodes.append(episode_item)
-                    continue  # Skip further checks for this link
-
-                # Check for 'Episode-' or 'Season-' pattern
-                match_episode_season = re.findall(r"(?:Episode-|Season-)(\d+)", episode_link, re.IGNORECASE)
-                if match_episode_season:
-                    episode_number_from_url = int(match_episode_season[1])
-                    # print(episode_number_from_url)
-                    # print(episode_link)
-                    episode_item = get_episode_by_season_and_number(season_item, episode_number_from_url)
-                    # print(episode_item)
-                    if not episode_item:
+                    elif function_identifier == 2:
                         episode_item = self.get_episodes_info_url(
                             episode_link=episode_link,
                             episode_folder_path=episode_folder_path,
                             season_item=season_item
                         )
-                    # for episode_item in episode_items:
-                    # print(episode_item.episode_number)
-                    if episode_item not in episodes:
-                        episodes.append(episode_item)
+
+                # Add the episode to the list if it's unique
+                if episode_item and episode_item not in episodes:
+                    episodes.append(episode_item)
 
         return episodes
 
+    def extract_episode_number(self, url):
+        """
+        Extract the episode number from the given URL and indicate which function to use.
+        :param url: The URL containing the episode information.
+        :return: A tuple (episode_number, identifier) where identifier is 1 or 2.
+        """
+        # First pattern: Match '/123 ' (number followed by a space)
+        match_file_number = re.search(r"/(\d+)\s", url)
+        if match_file_number:
+            return int(match_file_number.group(1)), 1
+
+        # Second pattern: Match 'Episode-123' or 'Season-123'
+        match_episode_season = re.findall(r"(?:Episode-|Season-)(\d+)", url, re.IGNORECASE)
+        if match_episode_season and len(match_episode_season) > 1:  # Ensure there are enough matches
+            return int(match_episode_season[1]), 2
+
+        # If no matches are found
+        if url != "https://eng.cartoonsarea.cc/":
+            print(f"Unable to extract episode number from URL: {url}")
+        return None, None
+
     def get_episodes_info_url(self, episode_link, episode_folder_path, season_item):
+        """
+        Scrape detailed episode information from a given episode link. Extract
+        metadata such as episode name, size, format, resolution, and download URL.
+        Save the episode to the database.
+
+        :param episode_link: The URL of the episode page to scrape.
+        :param episode_folder_path: The folder path where the episode will be saved.
+        :param season_item: The Season model instance to which the episode belongs.
+        :return: A list of Episode model instances with detailed metadata.
+        """
         response = requests.get(episode_link)
 
         # Parse the HTML with BeautifulSoup
@@ -268,18 +321,56 @@ class ScraperHandler:
         return episode_items
 
     def get_episode_item(self, episode_info_link, episode_folder_path, season_item):
+        """
+        Scrape basic episode information from a given link. Extract metadata
+        such as the episode number and name. Save the episode to the database.
+
+        :param episode_info_link: The URL containing basic episode information.
+        :param episode_folder_path: The folder path where the episode will be saved.
+        :param season_item: The Season model instance to which the episode belongs.
+        :return: An Episode model instance with basic metadata or None if scraping fails.
+        """
         response = requests.get(episode_info_link)
         soup = BeautifulSoup(response.text, 'html.parser')
-        base_url = "https://eng.cartoonsarea.cc"
 
-        # Find the information div
+        # Extract details using the modular function
+        details = self.extract_episode_details(soup)
+        if not details or not details.get("episode_url"):
+            print(f"Failed to scrape details for episode at {episode_info_link}. Skipping.")
+            return None
+
+        # Add the episode to the database
+        episode = add_episode(
+            season=season_item,
+            episode_number=details["episode_number"],
+            episode_name=details["episode_name"],
+            file_name=details["file_name"],
+            episode_size=details["episode_size"],
+            duration=details["duration"],
+            file_format=details["file_format"],
+            resolution=details["resolution"],
+            episode_url=details["episode_url"],
+            episode_folder_path=episode_folder_path,
+        )
+        mark_episode_as_cached(episode)
+        return episode
+
+    def extract_episode_details(self, soup):
+        """
+        Extract detailed metadata for an episode from a BeautifulSoup object.
+
+        :param soup: BeautifulSoup object of the episode page.
+        :return: A dictionary containing episode metadata.
+        """
+        details = {}
+
+        # Locate the information table
         info_div = soup.find('div', class_='Singamdasam text-center')
         if not info_div:
             print("No information div found.")
             return None
 
-        # Parse episode details from the table
-        details = {}
+        # Parse the details table
         table = info_div.find('table')
         if table:
             for row in table.find_all('tr'):
@@ -288,44 +379,28 @@ class ScraperHandler:
                 if label and value:
                     details[label.text.strip()] = value.text.strip()
 
-        # Extract download link
-        download_link_tag = table.find_next('a', class_='download-btn')
-        if not download_link_tag or 'href' not in download_link_tag.attrs:
+        # Extract the download link
+        download_link_tag = table.find_next('a', class_='download-btn') if table else None
+        if download_link_tag and 'href' in download_link_tag.attrs:
+            details['episode_url'] = urljoin("https://eng.cartoonsarea.cc", download_link_tag['href'])
+        else:
             print("No download link found.")
-            return None
+            details['episode_url'] = None
 
-        full_download_url = urljoin(base_url, download_link_tag['href'])
-        # print(full_download_url)
-        # print(details)
-
-        # Extract required fields
+        # Extract file name and infer other details
         file_name = details.get("File Name:", "Unknown")
-        episode_size = details.get("File Size:", "Unknown")
-        duration = details.get("Duration:", "Unknown")
-        file_format = details.get("File Format:", "Unknown")
-        resolution = details.get("Resolution:", "Unknown")
+        details["file_name"] = file_name
+        details["episode_size"] = details.get("File Size:", "Unknown")
+        details["duration"] = details.get("Duration:", "Unknown")
+        details["file_format"] = details.get("File Format:", "Unknown")
+        details["resolution"] = details.get("Resolution:", "Unknown")
 
         # Extract episode number and name
         try:
-            episode_number = int(file_name.split()[0])  # Assuming episode number is the first part
+            details["episode_number"] = int(file_name.split()[0])  # Assuming episode number is the first part
         except (ValueError, IndexError):
-            episode_number = -1  # Default value for error
+            details["episode_number"] = -1
             print("Could not determine episode number.")
 
-        episode_name = file_name.split(maxsplit=1)[-1].rsplit('.', 1)[0]  # Extract name without extension
-
-        # Create the Episode instance
-        episode = add_episode(
-            season=season_item,
-            episode_number=episode_number,
-            episode_name=episode_name,
-            file_name=file_name,
-            episode_size=episode_size,
-            duration=duration,
-            file_format=file_format,
-            resolution=resolution,
-            episode_url=full_download_url,
-            episode_folder_path=episode_folder_path,
-        )
-        mark_episode_as_cached(episode)
-        return episode
+        details["episode_name"] = file_name.split(maxsplit=1)[-1].rsplit('.', 1)[0] if " " in file_name else "Unknown"
+        return details
