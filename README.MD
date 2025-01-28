@@ -41,7 +41,7 @@ This project requires **Python 3.12.2** or above.
 Install the required dependencies listed in `requirements.txt`:
 
 ```bash
-pip install -r requirements.txt
+  pip install -r requirements.txt
 ```
 
 Before installing dependencies, create a virtual environment:
