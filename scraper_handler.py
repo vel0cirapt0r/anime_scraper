@@ -251,8 +251,6 @@ class ScraperHandler:
                 if episode_item and hasattr(episode_item, 'episode_number') and episode_item not in episodes:
                     episodes.append(episode_item)
 
-
-
         return episodes
 
     def extract_episode_number(self, url):
@@ -261,8 +259,8 @@ class ScraperHandler:
         :param url: The URL containing the episode information.
         :return: A tuple (episode_number, identifier) where identifier is 1 or 2.
         """
-        # First pattern: Match '/123 ' (number followed by a space)
-        match_file_number = re.search(r"/(\d+)\s", url)
+        # First pattern: Match '/123' where the number is clung to the word
+        match_file_number = re.search(r"/(\d+)(?=[A-Za-z!]|\s)", url)  # Matches numbers before letters or special characters
         if match_file_number:
             return int(match_file_number.group(1)), 1
 
@@ -403,11 +401,8 @@ class ScraperHandler:
         details["resolution"] = details.get("Resolution:", "Unknown")
 
         # Extract episode number and name
-        try:
-            details["episode_number"] = int(file_name.split()[0])  # Assuming episode number is the first part
-        except (ValueError, IndexError):
-            details["episode_number"] = -1
-            print("Could not determine episode number.")
+        details["episode_number"], function_identifier = self.extract_episode_number(details['episode_url'])
+
 
         details["episode_name"] = file_name.split(maxsplit=1)[-1].rsplit('.', 1)[0] if " " in file_name else "Unknown"
         return details
